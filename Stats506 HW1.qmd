@@ -1,0 +1,274 @@
+---
+title: "Stats506 HW1"
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Problem 1
+
+### a
+
+```{r}
+abalone <- read.table("abalone.data", sep = ",", header = FALSE)
+colnames(abalone) <- c("Sex", "Length", "Diameter", "Height",
+                       "WholeWeight", "ShuckedWeight", 
+                       "VisceraWeight", "ShellWeight", "Rings")
+```
+
+### b
+
+```{r}
+table(abalone$Sex)
+```
+
+##### There are 1370 observations are Female, 1342 observations are Infant, 1528 observations are Male.
+
+### c
+
+```{r}
+#1
+weights <- abalone [, c("WholeWeight", "ShuckedWeight", 
+                       "VisceraWeight", "ShellWeight")]
+corr1 <- cor(weights, abalone$Rings)
+corr1
+```
+
+##### Shell weight has the highest correlation (around 0.62757) with rings.
+
+```{r}
+#2
+mapply(function(w, r) cor(w, r),
+       split(abalone$ShellWeight, abalone$Sex),
+       split(abalone$Rings, abalone$Sex))
+```
+
+##### In Shell weight, Infant has the highest correlation(around 0.7254).
+
+```{r}
+#3
+abalone[which.max(abalone$Rings), c("WholeWeight", "ShuckedWeight", 
+                              "VisceraWeight", "ShellWeight")]
+```
+
+##### The abalone with the most rings have 1.8075 grams in whole weight, 0.7055 grams for shucked weight, 0.3215 grams for viscera weight and 0.475 grams for shell weight.
+
+```{r}
+#4
+mean(abalone$VisceraWeight > abalone$ShellWeight)
+```
+
+##### There are around 6.51% of abalones have a viscera weight larger than their shell weight.
+
+### d
+
+```{r}
+weights_d <- c("WholeWeight", "ShuckedWeight", "VisceraWeight", "ShellWeight")
+
+table_d <- sapply(weights_d, function(w) {
+  tapply(seq_len(nrow(abalone)), abalone$Sex, function(idx) {
+    cor(abalone[[w]][idx], abalone$Rings[idx])
+  })
+})
+
+table_d
+```
+
+### e
+
+```{r}
+rings_M <- abalone$Rings[abalone$Sex == "M"]
+rings_F <- abalone$Rings[abalone$Sex == "F"]
+rings_I <- abalone$Rings[abalone$Sex == "I"]
+
+n1 <- length(rings_M)
+n2 <- length(rings_F)
+n3 <- length(rings_I)
+
+m1 <- mean(rings_M)
+m2 <- mean(rings_F)
+m3 <- mean(rings_I)
+
+s1 <- var(rings_M)
+s2 <- var(rings_F)
+s3 <- var(rings_I)
+
+sp2_MF <- ((n1 - 1)*s1 + (n2 - 1)*s2) / (n1 + n2 - 2)
+sp2_MI <- ((n1 - 1)*s1 + (n3 - 1)*s3) / (n1 + n3 - 2)
+sp2_FI <- ((n2 - 1)*s1 + (n3 - 1)*s2) / (n2 + n3 - 2)
+
+t_stat_MF <- (m1 - m2) / sqrt(sp2_MF * (1/n1 + 1/n2))
+t_stat_MI <- (m1 - m3) / sqrt(sp2_MI * (1/n1 + 1/n3))
+t_stat_FI <- (m2 - m3) / sqrt(sp2_FI * (1/n2 + 1/n3))
+
+df_MF <- n1 + n2 - 2
+df_MI <- n1 + n3 - 2
+df_FI <- n2 + n3 - 2
+
+p_val_MF <- 2 * (1 - pt(abs(t_stat_MF), df_MF))
+p_val_MI <- 2 * (1 - pt(abs(t_stat_MI), df_MI))
+p_val_FI <- 2 * (1 - pt(abs(t_stat_FI), df_FI))
+
+pr <- function(p) format.pval(p, digits = 3, eps = 1e-16)
+
+table_e <- data.frame(
+  Comparison = c("M vs F", "M vs I", "F vs I"),
+  t_stat     = round(c(t_stat_MF, t_stat_MI, t_stat_FI), 3),
+  df         = c(df_MF, df_MI, df_FI),
+  p_value    = c(pr(p_val_MF), pr(p_val_MI), pr(p_val_FI))
+)
+table_e
+```
+
+##### Interpretation
+
+##### M vs F: The mean number of rings is significantly different between males and females (t = -3.67, p ≈ 0.00024). On average, females have slightly more rings than males.
+
+##### M vs I: Males have significantly more rings than infants (t = 26.90, p \< 1e-16). This indicates that male abalones are older than infants on average.
+
+##### F vs I: Females also have significantly more rings than infants (t = 27.18, p \< 1e-16). This shows that female abalones are older than infants on average.
+
+##### All three pairwise comparisons were statistically significant. This indicates that the mean number of rings differs across all three sexes of abalone. In particular:
+
+##### Females \> Males
+
+##### Adults (M & F) \> Infants
+
+##### Thus, sex is an important factor associated with the number of rings in abalone.
+
+## Problem 2
+
+### a
+
+```{r}
+food <- read.csv("food_expenditure.csv", header = TRUE)
+```
+
+### b
+
+```{r}
+colnames(food) <- c("ID", "Age", "HouseHoldSize", "State", "Currency",
+                    "FoodTotal", "FoodGrocery", "FoodOut", "FoodMisc",
+                    "DineOutTimes", "Alcohol", "AssistProg")
+```
+
+### c
+
+```{r}
+before <- nrow(food)
+food <- subset(food, Currency == "USD")
+after <- nrow(food)
+
+before; after
+```
+
+### d
+
+```{r}
+food <- subset(food, Age >= 18 & Age <= 100)
+```
+
+##### Remove Age \< 18. Remove unreasonable ages (over 100)
+
+### e
+
+```{r}
+food <- subset(food, nchar(State) == 2)
+```
+
+##### Retain the standard state abbreviations (2 letters)
+
+### f
+
+```{r}
+food <- subset(food, FoodTotal > 0)
+food <- subset(food, FoodGrocery >= 0)
+food <- subset(food, FoodOut >= 0)
+food <- subset(food, FoodMisc >= 0)
+```
+
+##### Remove negative values or 0 (obviously unreasonable)
+
+### g
+
+```{r}
+food <- subset(food, DineOutTimes >= 0 & DineOutTimes <= 21)
+```
+
+##### Reasonable range: 0=21 (3 times per day for a week)
+
+### h
+
+```{r}
+final <- nrow(food)
+final
+```
+
+##### After this cleaning my final number of observations is 122
+
+## Problem 3
+
+### a
+
+```{r}
+nextCollatz <- function(n) {
+  if (length(n) != 1 || !is.numeric(n) || n <= 0 || n != as.integer(n)) {
+    stop("n must be a single positive integer.")
+  }
+  if (n %% 2 == 0) {result <- n / 2} 
+  else {result <- 3 * n + 1}
+  
+  return(result)
+}
+
+nextCollatz(5)
+nextCollatz(16)
+```
+
+### b
+
+```{r}
+collatzSequence <- function(n, max_steps = 10000) {
+  seq_vec <- n
+  for (i in 1:max_steps) 
+    {if (n == 1) break
+    n <- nextCollatz(n)
+    seq_vec <- c(seq_vec, n)}
+  list(sequence = seq_vec, length = length(seq_vec))
+}
+
+
+collatzSequence(5)$sequence
+collatzSequence(19)$sequence
+```
+
+### c
+
+```{r}
+starts <- 100:500
+lens <- sapply(starts, function(s) collatzSequence(s)$length)
+
+min_len <- min(lens)
+shortest_start <- starts[which(lens == min_len)[1]]
+
+max_len <- max(lens)
+longest_start <- starts[which(lens == max_len)[1]]
+
+res <- list(
+  shortest = list(start = shortest_start, length = min_len,
+                  sequence = collatzSequence(shortest_start)$sequence),
+  longest  = list(start = longest_start,  length = max_len,
+                  sequence = collatzSequence(longest_start)$sequence)
+)
+
+res$shortest$start; res$shortest$length
+res$longest$start;  res$longest$length
+```
+
+```{r}
+res$shortest$sequence
+res$longest$sequence
+```
+
+##### 
