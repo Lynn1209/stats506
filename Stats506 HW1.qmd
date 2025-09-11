@@ -1,7 +1,10 @@
 ---
-title: "Stats506 HW1"
+title: "Stats506 Homework1"
+author: "Linxuan"
 ---
-
+```{r}
+# https://github.com/Lynn1209/stats506
+```
 ## Quarto
 
 Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
@@ -267,8 +270,11 @@ res$longest$start;  res$longest$length
 ```
 
 ```{r}
+#show complete sequence
 res$shortest$sequence
 res$longest$sequence
 ```
 
-##### 
+##### The lowest starting value for shortest is 128 for 8 Collatz sequence
+
+##### The lowest starting value for longest is 327 for 144 Collatz sequence
