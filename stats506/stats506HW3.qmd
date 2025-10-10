@@ -1,0 +1,282 @@
+---
+title: "Stats506HW3"
+format: html
+---
+
+## Prob1
+
+#### a
+
+```{r}
+library(haven)
+library(dplyr)
+library(stringr)
+library(janitor)
+library(tidyr)
+library(forcats)
+library(broom)
+library(knitr)
+library(pscl)
+library(emmeans)
+options(dplyr.summarise.inform = FALSE)
+```
+
+```{r}
+aux  <- read_xpt("AUX_I.XPT")
+demo <- read_xpt("DEMO_I.XPT")
+
+dim(aux)
+dim(demo)
+
+data <- inner_join(aux, demo, by = "SEQN")
+
+dim(data)
+```
+
+#### b
+
+```{r}
+data_b <- data %>%
+  mutate(
+    Gender = case_when(
+      RIAGENDR == 1 ~ "Male",
+      RIAGENDR == 2 ~ "Female",
+      TRUE ~ NA_character_
+    ) |> factor(levels = c("Male","Female")),
+
+    Citizenship_code = ifelse(DMDCITZN %in% c(7,9), NA, DMDCITZN),
+    Citizenship = factor(Citizenship_code,
+                         levels = c(1,2,3),
+                         labels = c("Citizen by birth","Naturalized","Non-citizen")),
+
+    NumKidsLe5 = case_when(
+      DMDHHSZA %in% c(7,9,77,97,99,997,999) ~ NA_real_,
+      TRUE ~ suppressWarnings(as.numeric(DMDHHSZA))
+    ),
+
+    Income_code = case_when(
+      INDHHIN2 %in% c(77,99) ~ NA_real_,
+      TRUE ~ suppressWarnings(as.numeric(INDHHIN2))
+    ),
+    Income = factor(Income_code, levels = 1:15, ordered = TRUE),
+    Income_score = as.numeric(Income)
+  ) %>%
+  select(SEQN, Gender, Citizenship, NumKidsLe5, Income, Income_score, everything())
+
+summary(data_b[, c("Gender","Citizenship","NumKidsLe5","Income","Income_score")])
+```
+
+#### c
+
+```{r}
+m1R <- glm(AUXTWIDR ~ Gender, data = data_b, family = poisson())
+m2R <- glm(AUXTWIDR ~ Gender + Citizenship + NumKidsLe5 + Income_score,
+           data = data_b, family = poisson())
+m1L <- glm(AUXTWIDL ~ Gender, data = data_b, family = poisson())
+m2L <- glm(AUXTWIDL ~ Gender + Citizenship + NumKidsLe5 + Income_score,
+           data = data_b, family = poisson())
+
+make_tab <- function(model, name){
+  tidy(model, exponentiate = TRUE, conf.int = TRUE) |>
+    select(term, estimate, conf.low, conf.high, p.value) |>
+    mutate(Model = name)
+}
+
+irr_tab <- bind_rows(
+  make_tab(m1R, "1R"),
+  make_tab(m2R, "2R"),
+  make_tab(m1L, "1L"),
+  make_tab(m2L, "2L")
+)
+
+irr_tab <- irr_tab |>
+  rename(
+    Term = term,
+    IRR = estimate,
+    CI_low = conf.low,
+    CI_high = conf.high,
+    `p-value` = p.value
+  )
+
+print(irr_tab)
+```
+
+#### d
+
+```{r}
+exp(cbind(IRR = coef(m2R), confint(m2R)))[ "GenderFemale", ]
+
+emm <- emmeans(m2R, ~ Gender, type = "response")
+summary(emm)
+
+contrast(emm, method = "revpairwise", type = "response")
+```
+
+#### In Model 2L (left ear), the incidence rate ratio (IRR) for females relative to males is 1.0137 (95% CI \[1.0068, 1.0207\], p \< 0.001).
+
+#### This indicates that, after controlling for citizenship status, number of children under five, and annual household income, females tend to have about 1.4% higher tympanometric width in the left ear than males.
+
+#### The model-based predicted values show that the average predicted tympanometric width is approximately 86.0 for males and 87.2 for females, with the difference between groups being statistically significant (p = 0.0001).
+
+#### Therefore, there is strong evidence of a gender difference in tympanometric width for the left ear, with women showing slightly larger average widths.
+
+## Prob2
+
+```{r}
+library(DBI)
+library(RSQLite)
+sakila <- dbConnect(SQLite(), "sakila_master.db")
+dbListTables(sakila)
+```
+
+#### a
+
+```{r}
+gg <- function(q) dbGetQuery(sakila, q)
+
+ans_a_SQL <- gg("
+SELECT s.store_id,
+       COUNT(c.customer_id)               AS customers,
+       ROUND(100.0*AVG(c.active), 2)      AS active_pct
+FROM store AS s
+JOIN customer AS c ON c.store_id = s.store_id
+GROUP BY s.store_id
+ORDER BY s.store_id;
+")
+ans_a_SQL
+```
+
+#### b
+
+```{r}
+ans_b_SQL <- gg("
+SELECT s.staff_id, s.first_name, s.last_name, co.country
+FROM staff AS s
+JOIN address AS a ON a.address_id = s.address_id
+JOIN city    AS ci ON ci.city_id = a.city_id
+JOIN country AS co ON co.country_id = ci.country_id
+ORDER BY s.staff_id;
+")
+ans_b_SQL
+```
+
+#### c
+
+```{r}
+ans_c_SQL <- gg("
+WITH rev AS (
+  SELECT f.film_id, f.title, SUM(p.amount) AS total_revenue
+  FROM film      AS f
+  JOIN inventory AS i ON i.film_id = f.film_id
+  JOIN rental    AS r ON r.inventory_id = i.inventory_id
+  JOIN payment   AS p ON p.rental_id = r.rental_id
+  GROUP BY f.film_id, f.title
+)
+SELECT title, total_revenue
+FROM rev
+WHERE total_revenue = (SELECT MAX(total_revenue) FROM rev)
+ORDER BY title;
+")
+ans_c_SQL
+```
+
+## Prob3
+
+```{r}
+library(readr)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+dat <- read_csv("au-500.csv", show_col_types = FALSE)
+```
+
+#### a
+
+```{r}
+web_clean <- str_to_lower(str_remove(dat$web, "/+$"))
+pct_com <- mean(str_detect(web_clean, "\\.com$"), na.rm = TRUE) * 100
+pct_com
+```
+
+#### There is 0% percentage of the websites are .com’s
+
+#### b
+
+```{r}
+domains <- str_to_lower(sub(".*@", "", dat$email))
+top_domain <- domains |> na.omit() |> table() |> sort(decreasing = TRUE)
+cat("Most common email domain:\n")
+print(head(top_domain, 4))
+```
+
+#### c
+
+```{r}
+comp <- dat$company_name
+has_nonalpha <- str_detect(comp, "[^A-Za-z\\s,]")
+has_nonalpha_no_amp <- str_detect(comp, "[^A-Za-z\\s,&]")
+
+pct_nonalpha <- mean(has_nonalpha, na.rm = TRUE) * 100
+pct_nonalpha_no_amp <- mean(has_nonalpha_no_amp, na.rm = TRUE) * 100
+
+cat(sprintf("With non-alpha char (excl. commas/space): %.2f%%\n", pct_nonalpha))
+cat(sprintf("Excluding '&': %.2f%%\n", pct_nonalpha_no_amp))
+```
+
+#### d
+
+```{r}
+fmt_phone <- function(x){
+  digits <- str_replace_all(x, "\\D", "")
+  digits <- substr(digits, 1, 10)
+  ifelse(nchar(digits)==10,
+         paste0(substr(digits,1,4), "-", substr(digits,5,7), "-", substr(digits,8,10)),
+         NA)
+}
+
+datad <- dat |>
+  mutate(phone1_new = fmt_phone(phone1),
+         phone2_new = fmt_phone(phone2))
+
+cat("First 10 formatted phone1:\n")
+print(head(datad$phone1_new, 10))
+cat("First 10 formatted phone2:\n")
+print(head(datad$phone2_new, 10))
+```
+
+#### e
+
+```{r}
+apt_str <- str_match(dat$address, "([0-9]+)\\s*$")[,2]
+apt_num <- suppressWarnings(as.numeric(apt_str))
+apt_num <- apt_num[!is.na(apt_num) & apt_num > 0]
+
+ggplot(data.frame(x = log(apt_num)), aes(x)) +
+  geom_histogram(bins = 30) +
+  labs(title = "Histogram of log(apartment numbers)",
+       x = "log(apartment number)", y = "Count")
+```
+
+#### f
+
+```{r}
+leading <- as.integer(substr(apt_num, 1, 1))
+leading <- leading[leading %in% 1:9]
+obs <- table(factor(leading, levels = 1:9))
+obs_p <- as.numeric(obs) / sum(obs)
+benford <- log10(1 + 1/(1:9))
+chisq <- suppressWarnings(chisq.test(x = obs, p = benford, rescale.p = TRUE))
+
+cat("(f) Benford test on apartment numbers:\n")
+print(round(obs_p, 3))
+cat("Expected (Benford):\n")
+print(round(benford, 3))
+cat(sprintf("Chi-square = %.3f, p = %.4f\n", chisq$statistic, chisq$p.value))
+if (chisq$p.value > 0.05) {
+  cat("Apartment numbers roughly follow Benford’s Law.\n")
+} else {
+  cat("Apartment numbers deviate from Benford’s Law.\n")
+}
+```
+
+#### According to Benford's test, the distribution of the first digit of our apartment numbers is significantly inconsistent with Benford's Law (p is very small, close to 0), which means that the apartment numbers are more like artificially regulated numbers rather than naturally generated values, and thus are less likely to be judged as "real data".

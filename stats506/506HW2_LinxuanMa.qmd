@@ -1,0 +1,339 @@
+---
+title: "506HW2"
+format: html
+editor: visual
+---
+
+## Prob 1
+
+#### a.
+
+#### version 1
+
+```{r}
+random_walk1 <- function(n){
+  pos <- 0
+  for(i in 1:n){
+    step <- sample(c(-1,1),1)
+    if(step == 1 && runif(1) < 0.05){
+      step <- 10
+    }else if(step == -1 && runif(1) < 0.2){
+      step <- 30
+    } 
+    pos <- pos+step
+  } 
+  return(pos)
+}
+```
+
+#### version 2
+
+```{r}
+random_walk2 <- function(n){
+  steps <- sample(c(-1,1), n, replace = TRUE)
+  
+  plus_1 <- which(steps == 1 & runif(n) < 0.05)
+  steps[plus_1] <- 10
+  
+  minus_1 <- which(steps == -1 & runif(n) < 0.2)
+  steps[minus_1] <- -3
+  
+  return(sum(steps))
+}
+```
+
+#### version 3
+
+```{r}
+random_walk3 <- function(n){
+  steps <- sapply(1:n, function(i){
+    step <- sample(c(-1,1),1)
+    if(step == 1 && runif(1) < 0.05){
+      step <- 10
+    }else if(step == -1 && runif(1) < 0.2){
+      step <- -3
+    }
+    return(step)
+  })
+  return(sum(steps))
+}
+```
+
+#### check
+
+```{r}
+random_walk1(10)
+random_walk2(10)
+random_walk3(10)
+
+random_walk1(1000)
+random_walk2(1000)
+random_walk3(1000)
+```
+
+#### b.
+
+```{r}
+#Use the same random inputs
+random_inputs <- function(n, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  list(
+    base = sample(c(-1, 1), n, replace = TRUE),
+    uni = runif(n)
+  )
+}
+
+#Set the rule that given in the question
+step_rule <- function(base, uni) {
+  if (base == 1) {
+    if (uni < 0.05) 10 else 1
+  } else {
+    if (uni < 0.2) -3 else -1
+  }
+}
+
+#version1
+random_walk1 <- function(base, uni) {
+  pos <- 0
+  for (i in seq_along(base)) {
+    pos <- pos + step_rule(base[i], uni[i])
+  }
+  pos
+}
+
+#version2
+random_walk2 <- function(base, uni) {
+  steps <- base
+  steps[ base== 1 & uni < 0.05] <- 10
+  steps[ base== -1 & uni < 0.2] <- -3
+  sum(steps)
+}
+
+#version3
+random_walk3 <- function(base, uni) {
+  sum(sapply(seq_along(base), function(i) step_rule(base[i], uni[i])))
+}
+
+#check n=10
+n10 <- 10
+inp <- random_inputs(n10, seed = 1)
+
+r1 <- random_walk1(inp$base, inp$uni)
+r2 <- random_walk2(inp$base, inp$uni)
+r3 <- random_walk3(inp$base, inp$uni)
+c(r1, r2, r3)
+
+#check n=1000
+n1000 <- 1000
+inp <- random_inputs(n1000, seed = 2)
+
+r11 <- random_walk1(inp$base, inp$uni)
+r22 <- random_walk2(inp$base, inp$uni)
+r33 <- random_walk3(inp$base, inp$uni)
+c(r11, r22, r33)
+```
+
+#### c.
+
+```{r}
+library(microbenchmark)
+
+bench_once <- function(n, seed = 1, times = 100) {
+  set.seed(seed)
+  base <- sample(c(-1, 1), n, replace = TRUE)
+  uni <- runif(n)
+
+  microbenchmark(
+    loop = random_walk1(base, uni),
+    vectorized = random_walk2(base, uni),
+    sapply = random_walk3(base, uni),
+    times = times
+  )
+}
+
+#n=1000
+bench_1k <- bench_once(1000)
+print(bench_1k)
+
+#n=100000
+bench_100k <- bench_once(100000)
+print(bench_100k)
+```
+
+#### From the result of the microbenchmark we can know that the vectorized function is the best choice for both small and large n. Loops may be useful for small n but ineffcient for the large one. Sapply is the least efficient due to function call overhead and should avoided for performance-critical tasks.
+
+#### d.
+
+```{r}
+simulate_prob <- function(n, trials = 10000, seed = 1) {
+  set.seed(seed)
+  
+  base <- matrix(sample(c(-1, 1), n * trials, replace = TRUE), nrow = n, ncol = trials)
+  uni <- matrix(runif(n * trials), nrow = n, ncol = trials)
+
+  steps <- base
+  steps[ base ==  1 & uni < 0.05] <- 10
+  steps[ base == -1 & uni < 0.2] <- -3
+
+  res <- colSums(steps)
+  mean(res == 0) 
+}
+
+#n=10
+p10 <- simulate_prob(10)
+#n=100
+p100 <- simulate_prob(100)
+#n=1000
+p1000 <- simulate_prob(1000)
+
+c(n10 = p10, n100 = p100, n1000 = p1000)
+```
+
+#### The probability that the random walk ends exactly at 0 decreases rapidly as the number of steps increases.
+
+#### From the Monte Carlo simulation, we find probabilities of about 0.133 for n=10, 0.017 for n=100, and 0.005 for n=1000. This trend occurs because the process has a slight positive drift, so as n grows, the distribution of the final position shifts away from 0.
+
+#### At the same time, the variance increases with n, spreading out the distribution and making it less likely to hit any specific point. The simulated results agree well with the approximation from the local Central Limit Theorem for n=100 and n=1000. And deviations for n=10 are expected because small-sample effects.
+
+## Prob 2
+
+```{r}
+set.seed(1)
+n_days <- 1e5
+
+low <- matrix(rpois(n_days*8, 1), nrow = n_days)
+day <- matrix(rpois(n_days*8, 8), nrow = n_days)
+even <- matrix(rpois(n_days*6, 12), nrow = n_days)
+rush <- matrix(pmax(round(rnorm(n_days*2, mean = 60, sd = sqrt(12))), 0), nrow = n_days)
+
+total <- rowSums(low) + rowSums(day) + rowSums(even) + rowSums(rush)
+
+mean_per_day <- mean(total)
+mean_per_day
+```
+
+## Prob 3
+
+```{r}
+youtube <- read.csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-02/youtube.csv')
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(purrr)
+library(readr)
+```
+
+#### a.
+
+```{r}
+drop_cols <- c("brand","superbowl_ads_dot_com_url","youtube_url","title","description","thumbnail","channel_title","published_at","id","etag")
+
+youtube_clean <- youtube %>%
+  select(-any_of(intersect(names(.), drop_cols)))
+dim(youtube_clean)
+```
+
+#### b.
+
+```{r}
+skew_base <- function(x) {
+  x <- x[is.finite(x)]
+  n <- length(x)
+  s <- sd(x)
+  if (n < 3 || is.na(s) || s == 0) return(NA_real_)
+  m3 <- mean((x - mean(x))^3)
+  m3 / s^3
+}
+
+judge <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x) || sd(x) == 0 || mean(x == 0) > 0.95) return("iii_not_appropriate")
+  sk  <- skew_base(x)
+  med <- median(x[x > 0])
+  if (is.na(med) || med == 0) med <- 1
+  tail_ratio <- as.numeric(quantile(x, 0.95, names = FALSE)) / med
+  
+  if (!is.na(sk) && (sk > 1 || tail_ratio > 20)) "ii_transform_log1p" else "i_as_is"
+}
+
+engv <- c("view_count","like_count","dislike_count","favorite_count","comment_count")
+
+res_b <- sapply(engv, function(v) judge(youtube_clean[[v]]))
+res_b
+```
+
+#### The view count ; like count ; dislike count and comment count are in ii. The favorite count in iii.
+
+#### c.
+
+```{r}
+yt <- youtube_clean %>%
+  mutate(
+    year = as.numeric(year),
+    view_log = log1p(view_count),
+    like_log = log1p(like_count),
+    dislike_log = log1p(dislike_count),
+    comm_log = log1p(comment_count)
+  ) %>%
+  select(year, funny, show_product_quickly, patriotic,
+         celebrity, danger, animals, use_sex,
+         view_log, like_log, dislike_log, comm_log) %>%
+  tidyr::drop_na()
+
+flags <- c("funny","show_product_quickly","patriotic",
+              "celebrity","danger","animals","use_sex")
+outcomes <- c("view_log","like_log","dislike_log","comm_log")
+
+
+models <- setNames(vector("list", length(outcomes)), outcomes)
+
+models <- map(outcomes, ~
+  lm(reformulate(c(flags, "year"), response = .x), data = yt)
+) |> set_names(outcomes)
+
+sig <- map_df(models, ~ tidy(.x), .id = "outcome") %>%
+  filter(term != "(Intercept)") %>%
+  mutate(direction = ifelse(estimate > 0, "positive", "negative")) %>%
+  arrange(outcome, p.value)
+
+sig_05 <- sig %>% filter(p.value < 0.05) %>%
+  select(outcome, term, estimate, p.value, direction)
+
+sig_05
+```
+
+#### We regressed log-transformed engagement metrics on seven ad attributes while controlling for year. The only attribute that reached significance was patriotic, which is positively associated with comment counts (beta around 0.935, p=0.024), implying roughly a 154% increase in comments, holding other covariates fixed. Year was also positively associated with comments (beta around 0.053), dislikes (beta around 0.093), and likes (beta around 0.075). No other attributes were statistically significant, and there were no significant predictors for views at the 5% level.
+
+#### d.
+
+```{r}
+dat_d <- yt %>%
+  dplyr::select(view_log, year, funny, show_product_quickly, patriotic,
+                celebrity, danger, animals, use_sex) %>%
+  tidyr::drop_na()
+
+X <- model.matrix(
+  ~ funny + show_product_quickly + patriotic + celebrity +
+    danger + animals + use_sex + year,
+  data = dat_d
+)
+y <- dat_d$view_log
+
+beta_manual <- drop(solve(crossprod(X), crossprod(X, y)))
+
+#compare
+beta_c <- coef(models$view_log)
+cmp_coef <- dplyr::tibble(
+  term = names(beta_c),
+  beta_lm_c = as.numeric(beta_c),
+  beta_manual = as.numeric(beta_manual[names(beta_c)]),
+  diff = beta_manual[names(beta_c)] - beta_c
+)
+
+cmp_coef
+```
+
+#### Have the same result as part c.
