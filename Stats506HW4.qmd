@@ -1,0 +1,244 @@
+---
+title: "Stats 506PS4"
+format: html
+---
+
+#### https://github.com/Lynn1209/stats506
+
+## Problem1
+
+```{r}
+library(tidyverse)
+library(nzelect)
+```
+
+```{r}
+?nzelect
+```
+
+#### (a)
+
+```{r}
+year_type_count <- nzge %>%
+  group_by(election_year, voting_type) %>%
+  summarise(votes = sum(votes), .groups = "drop") %>%
+  arrange(desc(votes))
+
+year_type_count
+```
+
+#### (b)
+
+```{r}
+y2014_candidate <- nzge %>%
+  filter(election_year == 2014, voting_type == "Candidate") %>%
+  group_by(party) %>%
+  summarise(votes = sum(votes), .groups = "drop") %>%
+  mutate(pct = 100*votes/sum(votes)) %>%
+  arrange(desc(pct))
+
+print(y2014_candidate, n = 25)
+```
+
+#### (c)
+
+```{r}
+winners <- nzge %>%
+  group_by(election_year, voting_type, party) %>%
+  summarise(votes = sum(votes), .groups = "drop_last") %>%
+  slice_max(votes, n = 1) %>%
+  ungroup() %>%
+  pivot_wider(
+    names_from = voting_type,
+    values_from = party
+  ) %>%
+  rename(
+    `Candidate vote winner` = Candidate,
+    `Party vote winner` = Party
+  ) %>%
+  arrange(election_year)
+
+winners
+```
+
+## Problem 2
+
+```{r}
+data_ATP <- read.csv("506HW2.csv")
+```
+
+#### (a)
+
+```{r}
+tourneys2019 <- data_ATP %>% distinct(tourney_id) %>% nrow()
+tourneys2019
+```
+
+#### (b)
+
+```{r}
+winners_by_tourney <- data_ATP %>%
+  filter(round == "F") %>%
+  transmute(tourney_id, tourney_name, winner_id, winner_name)
+
+wins_per_player <- winners_by_tourney %>%
+  count(winner_id, winner_name, name = "tournaments_win") %>%
+  arrange(desc(tournaments_win))
+
+more_than_one <- wins_per_player %>% filter(tournaments_win > 1) %>% nrow()
+more_than_one
+
+max_win <- wins_per_player %>% summarise(max_win = max(tournaments_win)) %>% pull(max_win)
+max_win
+
+most_winners <- wins_per_player %>% filter(tournaments_win == max_win)
+most_winners
+```
+
+#### There are 12 players win more than 1 tournament.
+
+#### 5 tournaments did the most winning players win. (Novak Djokovic & Dominic Thiem)
+
+#### (c)
+
+```{r}
+obs_diff <- data_ATP %>%
+  summarise(mean_diff = mean(w_ace - l_ace, na.rm = TRUE)) %>%
+  pull(mean_diff)
+obs_diff
+
+set.seed(123)
+B <- 2000
+perm_dist <- purrr::map_dbl(1:B, ~{
+  data_ATP %>%
+    mutate(swap = runif(n()) < 0.5,
+           wA = if_else(swap, l_ace, w_ace),
+           lA = if_else(swap, w_ace, l_ace)) %>%
+    summarise(diff = mean(wA - lA, na.rm = TRUE)) %>%
+    pull(diff)
+})
+
+p_value <- (sum(perm_dist >= obs_diff) + 1) / (length(perm_dist) + 1)
+p_value
+```
+
+#### The obs_diff = 1.7049, means winners on average have about 1.7 more aces per match than losers. And the p-value \< 0.0005.
+
+#### A permutation test with 2000 random shuffles yielded a p-value \< 0.0005, indicating that this difference is highly statistically significant.
+
+#### Thus, there is strong evidence that winners tend to have more aces than losers in 2019 ATP matches.
+
+#### (d)
+
+```{r}
+player_results <- data_ATP %>%
+  select(winner_id, winner_name, loser_id, loser_name) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = c("result", ".value"),
+    names_pattern = "(winner|loser)_(id|name)"
+  ) %>%
+  
+  mutate(win = if_else(result == "winner", 1L, 0L))
+
+player_winrates <- player_results %>%
+  group_by(id, name) %>%
+  summarise(
+    matches = n(),
+    wins = sum(win),
+    win_rate = wins / matches,
+    .groups = "drop"
+  ) %>%
+  filter(matches >= 5) %>%
+  arrange(desc(win_rate), desc(matches))
+
+top_rate <- max(player_winrates$win_rate)
+best_players <- player_winrates %>% filter(win_rate == top_rate)
+best_players
+```
+
+#### The player named Rafael Nadal have the highest win-rate(86.95652).
+
+#### Prob3
+
+```{r}
+covid <- read.csv("us-states.csv")
+covid <- covid %>%
+  mutate(date = as.Date(date)) %>%
+  filter(!is.na(cases_avg_per_100k))
+```
+
+#### (a)
+
+```{r}
+national_trend <- covid %>%
+  group_by(date) %>%
+  summarize(avg_cases = mean(cases_avg_per_100k))
+
+ggplot(national_trend, aes(x = date, y = avg_cases)) +
+  geom_line(color = "blue") +
+  geom_smooth(color = "red") +
+  labs(title = "Major and Minor Spikes in U.S. COVID-19 Cases",
+       x = "Date", y = "7-day Average Cases per 100k") +
+  theme_minimal()
+```
+
+#### From the plot we can noticed that there are 4 majors and 5 minor spikes in cases.
+
+#### In mid-2020 there are 2 minor spikes, then in winter 2020–2021 there have the first large wave. After the large wave there is a small break (minor spike) in spring 2021.
+
+#### Then in summer-autumn 2021 there is 2nd major spike. After this wave goes down, there is immediately a extremely high wave which can be note as 3rd wave.
+
+#### After the 3rd wave there is a minor wave around March-2022. Then in May-July in 2022, there is a major wave (4th).
+
+#### Then in winter 2022-2023 there is a minor spike.
+
+#### (b)
+
+```{r}
+state_totals <- covid %>%
+  group_by(state) %>%
+  summarize(total_per100k = sum(cases_avg_per_100k, na.rm = TRUE)) %>%
+  arrange(desc(total_per100k))
+
+high_states <- head(state_totals$state, 3)
+high_states
+low_states <- tail(state_totals$state, 3)
+low_states
+
+compare_states <- covid %>%
+  filter(state %in% c(high_states, low_states)) %>%
+  mutate(group = if_else(state %in% high_states, "High Infection States", "Low Infection States"))
+
+ggplot(compare_states, aes(x = date, y = cases_avg_per_100k, color = state)) +
+  geom_line(size = 0.9) +
+  facet_wrap(~ group, scales = "free_y") +
+  labs(title = "High vs Low Infection States ",
+       x = "Date", y = "7-day Average Cases per 100k") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+```
+
+#### High Infection States
+
+##### These states experienced multiple and large waves of infection. The Rhode Island reached a sharp spikes of over 500 new cases per 100k (early 2022). Also we can see the repeat rises and falls suggest that these states were hit by recurring outbreaks. Alaska also shows visible early waves, reflecting smaller states with limit health care capacity can still experience severe high infections.
+
+#### Low Infection States
+
+##### These states are in much lower and delayed waves of infection. The American Samoa even shows almost no activity until 2022. Suggest delayed virus introduction and smaller outbreaks due to geographic isolation. Maryland and Maine shows lower waves but do not reach the extreme level of high infection.
+
+#### Comparison Summary
+
+#### High inflection state exhibit earlier, more frequent and sharp spikes. Low inflection show delayed, fewer surges and small spikes.
+
+#### (c)
+
+```{r}
+first_significant <- covid %>%
+  group_by(state) %>%
+  filter(cases_avg_per_100k > 1) %>%
+  summarize(first_date = min(date)) %>%
+  arrange(first_date)
+
+head(first_significant, 5)
+```
